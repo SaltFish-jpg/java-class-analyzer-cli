@@ -1,8 +1,8 @@
 # java-class-analyzer-cli
 
-`java-class-analyzer-cli` is a project-scoped Java dependency analyzer. It is meant to be installed as a normal command-line tool, like `maven-indexer-cli`, without requiring MCP configuration.
+This project is derived from [handsomestWei/java-class-analyzer-mcp-server](https://github.com/handsomestWei/java-class-analyzer-mcp-server). It is the CLI version of that project. Thanks to the original author for the open-source contribution.
 
-The main design point is version accuracy. If the local Maven repository contains `demo-lib` versions `1.2`, `1.3`, and `1.4`, but the current project resolves `1.3`, this CLI indexes and decompiles only the jars from the current project's final classpath.
+`java-class-analyzer-cli` is a project-scoped Java dependency analyzer. It is meant to be installed as a normal command-line tool, like `maven-indexer-cli`, without requiring MCP configuration.
 
 ## Install
 
