@@ -1,5 +1,7 @@
 # java-class-analyzer-cli
 
+[English](README.md) | 简体中文
+
 本项目源自 [handsomestWei/java-class-analyzer-mcp-server](https://github.com/handsomestWei/java-class-analyzer-mcp-server)，是其 CLI 版本，感谢原作者的开源贡献。
 
 `java-class-analyzer-cli` 是一个项目级 Java 依赖类分析工具。它的目标是像 `maven-indexer-cli` 一样安装后即可在命令行使用，不需要额外配置 MCP，同时更适合项目组在具体 Java 项目里分析依赖类、方法签名和反编译源码。
