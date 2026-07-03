@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.java-class-analyzer/
+*.log
+hs_err_pid*.log
+replay_pid*.log
+*.tgz
+.tmp-smoke/
+.tmp-npm-cache*/

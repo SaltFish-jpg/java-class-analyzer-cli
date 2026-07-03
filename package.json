@@ -1,0 +1,65 @@
+{
+  "name": "java-class-analyzer-cli",
+  "version": "0.1.0",
+  "description": "Project-scoped Java dependency class analyzer CLI",
+  "type": "module",
+  "main": "dist/cli.js",
+  "types": "dist/cli.d.ts",
+  "bin": {
+    "java-class-analyzer-cli": "dist/cli.js"
+  },
+  "files": [
+    "dist/**/*",
+    "lib/**/*",
+    "skills/**/*",
+    "README.md",
+    "README-CN.md",
+    "THIRD_PARTY_NOTICES.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "pack:check": "npm pack --dry-run",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm run build"
+  },
+  "keywords": [
+    "java",
+    "maven",
+    "classpath",
+    "decompiler",
+    "cfr",
+    "javap",
+    "dependency-analysis"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SaltFish-jpg/java-class-analyzer-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SaltFish-jpg/java-class-analyzer-cli/issues"
+  },
+  "homepage": "https://github.com/SaltFish-jpg/java-class-analyzer-cli#readme",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "fs-extra": "^11.2.0",
+    "yauzl": "^3.2.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.14.0",
+    "@types/yauzl": "^2.10.3",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
