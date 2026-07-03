@@ -54,6 +54,8 @@ mvn -q dependency:build-classpath -Dmdep.outputFile=.java-class-analyzer/classpa
 
 如果多个 classpath jar 中包含同一个类，默认选择 classpath 顺序最靠前的 jar，并在命令输出中提示冲突。
 
+对于 Maven 多模块项目，CLI 会基于 reactor 解析 classpath。如果模块 A 依赖兄弟模块 B，且 B 尚未 install 到本地 Maven 仓库，CLI 会先构建所需 reactor artifact，并把这些内部模块 jar 从依赖索引中排除。
+
 ## 缓存目录
 
 ```text

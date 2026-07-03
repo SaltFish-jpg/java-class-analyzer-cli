@@ -85,6 +85,7 @@ java-class-analyzer-cli analyze-class --project . com.foo.Bar --json
 ## 注意事项
 
 - CLI 使用 `mvn dependency:build-classpath` 解析当前 Maven 项目的最终 classpath。
+- 对 Maven 多模块项目，CLI 会基于 reactor 解析，兄弟模块依赖不需要先 install 到本地仓库。
 - 只索引该 classpath 中的 jar，并保留 classpath 顺序。
 - 如果多个 jar 含有同一个类，使用 classpath 顺序最靠前的结果，并向用户说明存在冲突。
 - 反编译源码缓存绑定 jar 指纹，依赖升级后不会因为 className 相同而复用旧源码。

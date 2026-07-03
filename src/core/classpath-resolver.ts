@@ -10,6 +10,16 @@ export interface ClasspathResolveOptions {
   scope?: string;
 }
 
+interface MavenProjectInfo {
+  projectPath: string;
+  packaging: string;
+  modules: string[];
+}
+
+interface MavenModuleInfo extends MavenProjectInfo {
+  relativePath: string;
+}
+
 export interface ClasspathResolveResult {
   projectPath: string;
   classpathFile: string;
@@ -28,21 +38,13 @@ export async function resolveProjectClasspath(options: ClasspathResolveOptions):
   const outputFile = classpathFilePath(projectPath);
   await fs.remove(outputFile);
 
-  const args = buildMavenArgs(outputFile, options);
-  await runMaven(projectPath, args);
+  const projectInfo = await readMavenProjectInfo(projectPath);
+  const reactorRoot = await findReactorRoot(projectPath);
+  const classpath = projectInfo.modules.length
+    ? await resolveAggregatorClasspath(projectPath, projectInfo, outputFile, options)
+    : await resolveSingleProjectClasspath(projectPath, reactorRoot, outputFile, options);
 
-  if (!(await fs.pathExists(outputFile))) {
-    throw new Error(`Maven did not create classpath file: ${outputFile}`);
-  }
-
-  const classpathText = await fs.readFile(outputFile, 'utf8');
-  const classpath = parseClasspath(classpathText)
-    .map((entry) => path.resolve(projectPath, entry))
-    .filter((entry) => entry.toLowerCase().endsWith('.jar'));
-
-  if (classpath.length === 0) {
-    throw new Error(`Resolved classpath is empty. Check Maven dependency resolution for ${projectPath}`);
-  }
+  await fs.outputFile(outputFile, `${classpath.join(path.delimiter)}\n`, 'utf8');
 
   return {
     projectPath,
@@ -51,8 +53,83 @@ export async function resolveProjectClasspath(options: ClasspathResolveOptions):
   };
 }
 
-function buildMavenArgs(outputFile: string, options: ClasspathResolveOptions): string[] {
-  const args = ['-q', 'dependency:build-classpath', '-D', `mdep.outputFile=${outputFile}`];
+async function resolveAggregatorClasspath(
+  projectPath: string,
+  projectInfo: MavenProjectInfo,
+  outputFile: string,
+  options: ClasspathResolveOptions,
+): Promise<string[]> {
+  const modules = await collectClasspathModules(projectInfo);
+  const classpath: string[] = [];
+
+  if (modules.length === 0) {
+    return resolveMavenClasspath(projectPath, outputFile, options);
+  }
+
+  for (const moduleInfo of modules) {
+    const moduleOutputFile = moduleClasspathFilePath(projectPath, moduleInfo.relativePath);
+    const moduleClasspath = await resolveMavenClasspath(projectPath, moduleOutputFile, options, {
+      moduleSelector: moduleInfo.relativePath,
+      reactorRoot: projectPath,
+    });
+    classpath.push(...moduleClasspath);
+  }
+
+  return uniquePaths(classpath);
+}
+
+async function resolveSingleProjectClasspath(
+  projectPath: string,
+  reactorRoot: string | undefined,
+  outputFile: string,
+  options: ClasspathResolveOptions,
+): Promise<string[]> {
+  if (!reactorRoot || path.resolve(reactorRoot) === path.resolve(projectPath)) {
+    return resolveMavenClasspath(projectPath, outputFile, options);
+  }
+
+  const moduleSelector = toMavenModuleSelector(reactorRoot, projectPath);
+  return resolveMavenClasspath(reactorRoot, outputFile, options, {
+    moduleSelector,
+    reactorRoot,
+  });
+}
+
+interface MavenClasspathInvocation {
+  moduleSelector?: string;
+  reactorRoot?: string;
+}
+
+async function resolveMavenClasspath(
+  mavenWorkingDir: string,
+  outputFile: string,
+  options: ClasspathResolveOptions,
+  invocation: MavenClasspathInvocation = {},
+): Promise<string[]> {
+  await fs.remove(outputFile);
+
+  const args = buildMavenArgs(outputFile, options, invocation);
+  await runMaven(mavenWorkingDir, args);
+
+  if (!(await fs.pathExists(outputFile))) {
+    throw new Error(`Maven did not create classpath file: ${outputFile}`);
+  }
+
+  const classpathText = await fs.readFile(outputFile, 'utf8');
+  return parseClasspath(classpathText)
+    .map((entry) => path.resolve(mavenWorkingDir, entry))
+    .filter((entry) => entry.toLowerCase().endsWith('.jar'))
+    .filter((entry) => !invocation.reactorRoot || !isReactorBuildOutputJar(invocation.reactorRoot, entry));
+}
+
+function buildMavenArgs(outputFile: string, options: ClasspathResolveOptions, invocation: MavenClasspathInvocation): string[] {
+  const args = ['-q'];
+
+  if (invocation.moduleSelector) {
+    args.push('-pl', invocation.moduleSelector, '-am', '-DskipTests', '-Dmaven.test.skip=true', 'package');
+  }
+
+  args.push('dependency:build-classpath', '-D', `mdep.outputFile=${outputFile}`);
 
   if (options.scope) {
     args.push('-D', `mdep.scope=${options.scope}`);
@@ -67,6 +144,107 @@ function buildMavenArgs(outputFile: string, options: ClasspathResolveOptions): s
   }
 
   return args;
+}
+
+async function findReactorRoot(projectPath: string): Promise<string | undefined> {
+  let current = path.dirname(projectPath);
+
+  while (current !== path.dirname(current)) {
+    const pomPath = path.join(current, 'pom.xml');
+    if (await fs.pathExists(pomPath)) {
+      const info = await readMavenProjectInfo(current);
+      if (info.modules.some((modulePath) => isSameOrChild(projectPath, path.resolve(current, modulePath)))) {
+        return current;
+      }
+    }
+
+    current = path.dirname(current);
+  }
+
+  return undefined;
+}
+
+async function collectClasspathModules(projectInfo: MavenProjectInfo, rootPath = projectInfo.projectPath): Promise<MavenModuleInfo[]> {
+  const result: MavenModuleInfo[] = [];
+
+  for (const modulePath of projectInfo.modules) {
+    const absoluteModulePath = path.resolve(projectInfo.projectPath, modulePath);
+    const info = await readMavenProjectInfo(absoluteModulePath);
+    const relativePath = toMavenModuleSelector(rootPath, absoluteModulePath);
+
+    if (info.modules.length > 0) {
+      result.push(...await collectClasspathModules(info, rootPath));
+      continue;
+    }
+
+    if (info.packaging !== 'pom') {
+      result.push({ ...info, relativePath });
+    }
+  }
+
+  return result;
+}
+
+async function readMavenProjectInfo(projectPath: string): Promise<MavenProjectInfo> {
+  const pom = await fs.readFile(path.join(projectPath, 'pom.xml'), 'utf8');
+  const pomWithoutComments = pom.replace(/<!--[\s\S]*?-->/g, '');
+  const packaging = extractFirstXmlValue(pomWithoutComments, 'packaging') ?? 'jar';
+  const modulesBlock = pomWithoutComments.match(/<modules>([\s\S]*?)<\/modules>/)?.[1] ?? '';
+  const modules = [...modulesBlock.matchAll(/<module>\s*([^<]+?)\s*<\/module>/g)]
+    .map((match) => match[1].trim())
+    .filter(Boolean);
+
+  return {
+    projectPath,
+    packaging,
+    modules,
+  };
+}
+
+function extractFirstXmlValue(xml: string, tagName: string): string | undefined {
+  const match = xml.match(new RegExp(`<${tagName}>\\s*([^<]+?)\\s*</${tagName}>`));
+  return match?.[1]?.trim();
+}
+
+function moduleClasspathFilePath(projectPath: string, moduleSelector: string): string {
+  const safeModuleName = moduleSelector.replace(/[\\/.:]+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '_');
+  return path.join(path.dirname(classpathFilePath(projectPath)), `classpath.${safeModuleName}.txt`);
+}
+
+function toMavenModuleSelector(rootPath: string, modulePath: string): string {
+  return path.relative(rootPath, modulePath).replace(/\\/g, '/');
+}
+
+function isSameOrChild(childPath: string, parentPath: string): boolean {
+  const relative = path.relative(parentPath, childPath);
+  return relative === '' || Boolean(relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function uniquePaths(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const key = process.platform === 'win32' ? value.toLowerCase() : value;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push(value);
+  }
+
+  return result;
+}
+
+function isReactorBuildOutputJar(reactorRoot: string, jarPath: string): boolean {
+  const relative = path.relative(reactorRoot, jarPath);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return false;
+  }
+
+  const segments = relative.split(path.sep).map((segment) => segment.toLowerCase());
+  return segments.includes('target');
 }
 
 function parseClasspath(text: string): string[] {

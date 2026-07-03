@@ -54,6 +54,8 @@ Index entries include:
 
 If multiple classpath jars contain the same class, the first jar by classpath order is selected by default and the command reports the conflict.
 
+For Maven multi-module projects, the CLI resolves classpaths from the reactor. If module A depends on sibling module B and B has not been installed to the local Maven repository, the CLI builds the needed reactor artifacts and filters those internal module jars out of the dependency index.
+
 ## Cache Layout
 
 ```text

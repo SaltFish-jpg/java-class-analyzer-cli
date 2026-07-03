@@ -11,7 +11,7 @@ const program = new Command();
 program
   .name('java-class-analyzer-cli')
   .description('Project-scoped Java classpath analyzer and decompiler')
-  .version('0.1.0');
+  .version('1.0.0');
 
 function addProjectOption(command: Command): Command {
   return command.requiredOption('-p, --project <path>', 'Maven project root path');

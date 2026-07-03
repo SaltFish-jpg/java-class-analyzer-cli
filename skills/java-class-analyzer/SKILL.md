@@ -85,6 +85,7 @@ java-class-analyzer-cli analyze-class --project . com.foo.Bar --json
 ## Notes
 
 - The CLI resolves the current Maven project's final classpath using `mvn dependency:build-classpath`.
+- For Maven multi-module projects, the CLI resolves from the reactor so sibling module dependencies do not need to be installed locally.
 - It indexes only jars on that classpath, preserving classpath order.
 - If more than one jar contains the same class, use the classpath-first result and mention the conflict.
 - Decompiled source cache is tied to a jar fingerprint, so dependency upgrades do not reuse stale source for the same class name.
